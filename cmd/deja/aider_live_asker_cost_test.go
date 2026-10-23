@@ -25,7 +25,7 @@ func TestAiderAskerStopsWalkingOnceTheWindowCloses(t *testing.T) {
 	// bug makes asker() pay again on every message for the rest of the run.
 	padding := strings.Repeat(strings.Repeat("x", 200)+"\n", 100000)
 	before := "\n# aider chat started at 2026-09-01 09:00:00\n\n#### filler  \n\nok\n\n"
-	if err := os.WriteFile(history, []byte(padding+before), 0o644); err != nil {
+	if err = os.WriteFile(history, []byte(padding+before), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	offset := int64(len(padding + before))
