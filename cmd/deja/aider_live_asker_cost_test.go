@@ -37,10 +37,10 @@ func TestAiderAskerStopsWalkingOnceTheWindowCloses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.WriteString(ambiguous); err != nil {
+	if _, err = f.WriteString(ambiguous); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Close(); err != nil {
+	if err = f.Close(); err != nil {
 		t.Fatal(err)
 	}
 
