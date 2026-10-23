@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -13,6 +12,12 @@ import (
 // (launch to launch+1m) has closed with nothing resolved, it still walks the
 // whole history again on every later call instead of settling on the
 // fallback sid (#5295).
+//
+// A wall-clock comparison stood here before and was flaky on a shared
+// runner (a slow run's "first" call could cost as little as a fast one's
+// "second"). This pins the same bug on behaviour instead: the history is
+// rewritten after the window has closed to a shape a fresh walk would
+// resolve, so a re-walk is caught by the id it would return, not by timing.
 func TestAiderAskerStopsWalkingOnceTheWindowCloses(t *testing.T) {
 	tmp := t.TempDir()
 	history := filepath.Join(tmp, ".aider.chat.history.md")
@@ -21,47 +26,30 @@ func TestAiderAskerStopsWalkingOnceTheWindowCloses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Bulk the file up so a full walk costs something measurable: what the
-	// bug makes asker() pay again on every message for the rest of the run.
-	padding := strings.Repeat(strings.Repeat("x", 200)+"\n", 100000)
 	before := "\n# aider chat started at 2026-09-01 09:00:00\n\n#### filler  \n\nok\n\n"
-	if err = os.WriteFile(history, []byte(padding+before), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	offset := int64(len(padding + before))
 	// Two aiders started in the same launch second, both past offset: nothing
 	// says which header is this run's.
 	ambiguous := "\n# aider chat started at 2026-10-01 09:00:00\n\n#### one  \n\nok\n\n" +
 		"\n# aider chat started at 2026-10-01 09:00:00\n\n#### two  \n\nok\n\n"
-	f, err := os.OpenFile(history, os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
+	if err := os.WriteFile(history, []byte(before+ambiguous), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.WriteString(ambiguous); err != nil {
-		t.Fatal(err)
-	}
-	if err = f.Close(); err != nil {
-		t.Fatal(err)
-	}
+	offset := int64(len(before))
 
 	l := &aiderLive{history: history, offset: offset, launch: launch, sid: "aider-test-fallback"}
 
-	start := time.Now()
-	first := l.asker()
-	firstElapsed := time.Since(start)
-	if first != l.sid {
+	if first := l.asker(); first != l.sid {
 		t.Fatalf("ambiguous launch: asker() returned %q, want the fallback %q", first, l.sid)
 	}
 
-	// The window is long closed: the answer is final and should be kept, not
-	// walked for again.
-	start = time.Now()
-	second := l.asker()
-	secondElapsed := time.Since(start)
-	if second != l.sid {
-		t.Fatalf("second call returned %q, want the same fallback %q", second, l.sid)
+	// The window is long closed, so the fallback is final. Rewrite the
+	// history to one header in the same window: a walk that still runs now
+	// would resolve to that session's id instead of keeping the fallback.
+	resolved := "\n# aider chat started at 2026-10-01 09:00:00\n\n#### one  \n\nok\n\n"
+	if err := os.WriteFile(history, []byte(before+resolved), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if secondElapsed > firstElapsed/4 {
-		t.Fatalf("second call took %v, almost as long as the first (%v): asker() is still walking the whole history after the window closed", secondElapsed, firstElapsed)
+	if second := l.asker(); second != l.sid {
+		t.Fatalf("second call returned %q, want the same fallback %q: asker() is still walking the whole history after the window closed", second, l.sid)
 	}
 }
