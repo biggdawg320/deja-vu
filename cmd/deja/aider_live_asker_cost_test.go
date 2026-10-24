@@ -31,7 +31,7 @@ func TestAiderAskerStopsWalkingOnceTheWindowCloses(t *testing.T) {
 	// says which header is this run's.
 	ambiguous := "\n# aider chat started at 2026-10-01 09:00:00\n\n#### one  \n\nok\n\n" +
 		"\n# aider chat started at 2026-10-01 09:00:00\n\n#### two  \n\nok\n\n"
-	if err := os.WriteFile(history, []byte(before+ambiguous), 0o644); err != nil {
+	if err = os.WriteFile(history, []byte(before+ambiguous), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	offset := int64(len(before))
@@ -46,7 +46,7 @@ func TestAiderAskerStopsWalkingOnceTheWindowCloses(t *testing.T) {
 	// history to one header in the same window: a walk that still runs now
 	// would resolve to that session's id instead of keeping the fallback.
 	resolved := "\n# aider chat started at 2026-10-01 09:00:00\n\n#### one  \n\nok\n\n"
-	if err := os.WriteFile(history, []byte(before+resolved), 0o644); err != nil {
+	if err = os.WriteFile(history, []byte(before+resolved), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if second := l.asker(); second != l.sid {
