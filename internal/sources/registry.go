@@ -282,6 +282,17 @@ func harnessTable() []Harness { //nolint:funlen // one entry per supported harne
 			},
 		},
 		{
+			// MiniMax Code keeps one directory per session, sharded by the day
+			// it started, and writes the transcript beside a manifest.
+			Name: "mcode", Load: LoadMcode, Files: McodeSessionFiles,
+			Kinds: []FileKind{{
+				Name:      "mcode",
+				Match:     mcodeIsTranscript,
+				Parse:     fullParse(ParseMcodeFile),
+				ParseFrom: offsetParse(ParseMcodeFileFromOffset),
+			}},
+		},
+		{
 			Name: "aider", Load: LoadAider, Files: AiderFiles,
 			Kinds: []FileKind{{
 				Name:  "aider",

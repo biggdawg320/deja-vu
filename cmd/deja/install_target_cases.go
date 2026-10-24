@@ -47,6 +47,8 @@ func installTargetCase(target string) (installTargetFunc, bool) {
 		"workbuddy-auto": installWorkBuddyAuto,
 		"muse":           installMuseMCP,
 		"muse-auto":      installMuseAuto,
+		"mcode":          installMcode,
+		"mcode-auto":     installMcodeAuto,
 		"kimi":           installKimiMCP,
 		"kimi-auto":      installTargetKimiAuto,
 		"zed": func(exe string, uninstall bool) (installResult, error) {

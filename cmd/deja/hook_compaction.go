@@ -56,6 +56,12 @@ func compactionSource(input precompactHookInput, workspace string) (sources.Comp
 		transcript sources.CompactionTranscript
 		err        error
 	)
+	// MiniMax Code gives hooks a temporary Claude-compatible projection of
+	// the session as transcript_path and deletes it after the call. Its own
+	// store, read by the session id, is the record.
+	if input.Harness == "mcode" {
+		input.TranscriptPath = ""
+	}
 	switch {
 	case input.TranscriptPath != "":
 		transcript, err = readCompactionFile(input, workspace)

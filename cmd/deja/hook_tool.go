@@ -166,6 +166,9 @@ const (
 	hookToolCrush
 	// Copilot CLI's flat {"additionalContext": …}; see hook_strict.go.
 	hookToolCopilot
+	// MiniMax Code's {"hookSpecificOutput":{"hookEventName":…,"additionalContext":…}};
+	// see hook_mcode.go.
+	hookToolMcode
 )
 
 func hookToolShapeOf(rest []string) hookToolShape {
@@ -179,6 +182,8 @@ func hookToolShapeOf(rest []string) hookToolShape {
 		return hookToolCrush
 	case "--copilot", "-copilot":
 		return hookToolCopilot
+	case "--mcode", "-mcode":
+		return hookToolMcode
 	}
 	return hookToolClaude
 }
@@ -323,6 +328,9 @@ func runHookToolMode(dir string, stdin io.Reader, stdout io.Writer, shape hookTo
 	case hookToolCopilot:
 		emitCopilotContext(stdout, out)
 		return nil
+	case hookToolMcode:
+		emitMcodeContext(stdout, event, out)
+		return nil
 	case hookToolClaude:
 	}
 	var resp sessionStartHookResponse
@@ -424,6 +432,8 @@ func toolHookLineSkipping(dir, cwd string, input toolHookInput, used func(string
 // applyPatchLine is the file line for the first file in a patch that has one.
 func applyPatchLine(dir, cwd, patch string, self func(index.SessionMeta, string) bool) string {
 	for _, path := range applyPatchFiles(patch) {
+		// A shell `cd sub && apply_patch` edits sub/<header> (#5306).
+		path = sources.ShellPatchPath(patch, cwd, path)
 		if line := fileHookLineOutside(dir, cwd, path, self); line != "" {
 			return line
 		}

@@ -582,6 +582,10 @@ func ClaudeProjectName(dir string) string {
 // directory: the name a session there carried before the file named its tree.
 func PlainProjectName(dir string) string { return claudeProjectName(dir) }
 
+// CWDProjectName is the project name a session recorded in the real directory
+// cwd carries: the alias, or its parent/base form.
+func CWDProjectName(cwd string) string { return cwdProjectName(cwd) }
+
 // ClaudeProjectDirBase returns the encoded project dir name for a transcript
 // path, e.g. "-Users-x-projects-app" for .../projects/-Users-x-projects-app/s.jsonl.
 func ClaudeProjectDirBase(path string) string {

@@ -213,6 +213,60 @@ func TestClearingCopilotHooksKeepsTheReadersComment(t *testing.T) {
 	}
 }
 
+// The reader's comments inside a list they share with deja stay where they
+// were written, and the list is not written again on one line (#5312).
+func TestClearingCopilotHooksKeepsCommentsInsideTheSharedList(t *testing.T) {
+	deja := "/usr/local/bin/deja hook-context --copilot"
+	for _, tc := range []struct{ name, list, want string }{
+		{
+			name: "deja last",
+			list: "      // mine: warm the cache first\n      {\"type\": \"command\", \"bash\": \"make warm\"},\n      {\"type\": \"command\", \"bash\": \"" + deja + "\"}\n",
+			want: "      // mine: warm the cache first\n      {\"type\": \"command\", \"bash\": \"make warm\"}\n",
+		},
+		{
+			name: "deja first",
+			list: "      {\"type\": \"command\", \"bash\": \"" + deja + "\"},\n      // mine: warm the cache first\n      {\"type\": \"command\", \"bash\": \"make warm\"}\n",
+			want: "      // mine: warm the cache first\n      {\"type\": \"command\", \"bash\": \"make warm\"}\n",
+		},
+		{
+			name: "deja between two of the reader's",
+			list: "      {\"bash\": \"a\"}, // first\n      {\"bash\": \"" + deja + "\"},\n      /* last */ {\"bash\": \"b\", /* why */ \"timeoutSec\": 5}\n",
+			want: "      {\"bash\": \"a\"}, // first\n      /* last */ {\"bash\": \"b\", /* why */ \"timeoutSec\": 5}\n",
+		},
+		{
+			name: "deja's element carries a comment of its own",
+			list: "      {\"bash\": \"a\"},\n      {\"bash\": \"" + deja + "\", /* ours */ \"type\": \"command\"}\n",
+			want: "      {\"bash\": \"a\"}\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			text := "{\n  // copilot settings\n  \"hooks\": {\n    \"sessionStart\": [\n" + tc.list + "    ]\n  }\n}\n"
+			var was map[string]any
+			if err := json.Unmarshal([]byte(jsoncToJSON(text)), &was); err != nil {
+				t.Fatal(err)
+			}
+			hooks := typedOrFatal[map[string]any](t, was["hooks"])
+			start := typedOrFatal[[]any](t, hooks["sessionStart"])
+			var kept []any
+			for _, e := range start {
+				m := typedOrFatal[map[string]any](t, e)
+				if b, _ := m["bash"].(string); b != deja {
+					kept = append(kept, e)
+				}
+			}
+			root := map[string]any{"hooks": map[string]any{"sessionStart": kept}}
+			got, err := dropCopilotHooksJSONC(text, typedOrFatal[map[string]any](t, was["hooks"]), root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "{\n  // copilot settings\n  \"hooks\": {\n    \"sessionStart\": [\n" + tc.want + "    ]\n  }\n}\n"
+			if got != want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
 // A line comment that ends the line in front of the key taken out keeps its
 // newline: without it the closing brace landed inside the comment.
 func TestTakingAKeyOutAfterALineCommentKeepsTheBrace(t *testing.T) {

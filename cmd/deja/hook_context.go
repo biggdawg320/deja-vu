@@ -682,10 +682,13 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// get the fallback they got before the echo existed.
 	eventName := replyEventName(input.HookEventName, "SessionStart", "SessionStart", "PostCompaction")
 	shape := hookToolClaude
-	if plain {
+	switch {
+	case plain:
 		shape = hookToolPlain
-	} else if copilotHookOutput {
+	case copilotHookOutput:
 		shape = hookToolCopilot
+	case mcodeHookOutput:
+		shape = hookToolMcode
 	}
 	if input.Once && input.PromptStamps && sessionHadDigest(dir, input.SessionID) {
 		return nil

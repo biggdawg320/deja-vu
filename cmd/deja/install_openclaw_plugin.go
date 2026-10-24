@@ -333,6 +333,17 @@ func openclawLoadPathsJSONC(text, dir string, on bool, kept, loadKeys, pluginKey
 // A list left empty stays as `[]`; dropping the key is
 // the caller's call.
 func jsoncCutListStrings(text string, at [2]int, match func(string) bool) (string, error) {
+	return jsoncCutListElements(text, at, func(elem string) bool {
+		var s string
+		return json.Unmarshal([]byte(elem), &s) == nil && match(s)
+	})
+}
+
+// jsoncCutListElements is jsoncCutListStrings for the elements, strings and
+// objects, that match picks out by their text as the list has it: comments
+// inside an object are still there, and match reads them out. Elements are
+// offered in order.
+func jsoncCutListElements(text string, at [2]int, match func(elem string) bool) (string, error) {
 	blank := stripJSONComments(text)
 	// The last thing in the list that is not space or a comment.
 	prevSig := func(i int) int {
@@ -343,13 +354,26 @@ func jsoncCutListStrings(text string, at [2]int, match func(string) bool) (strin
 		}
 		return i
 	}
-	// The strings at the list's own level that match, last first so the
+	// The elements at the list's own level that match, last first so the
 	// offsets of the ones before stay good.
 	var hits [][2]int
 	depth := 0
 	for i := at[0] + 1; i < at[1]-1; i++ {
 		switch blank[i] {
-		case '[', '{':
+		case '{':
+			if depth == 0 {
+				end := zedObjectEnd(text, i)
+				if end < 0 || end > at[1] {
+					return "", errors.New("has an open object")
+				}
+				if match(text[i:end]) {
+					hits = append(hits, [2]int{i, end})
+				}
+				i = end - 1
+				continue
+			}
+			depth++
+		case '[':
 			depth++
 		case ']', '}':
 			depth--
@@ -358,8 +382,7 @@ func jsoncCutListStrings(text string, at [2]int, match func(string) bool) (strin
 			if end < 0 {
 				return "", errors.New("has an open string")
 			}
-			var s string
-			if depth == 0 && json.Unmarshal([]byte(text[i:end]), &s) == nil && match(s) {
+			if depth == 0 && match(text[i:end]) {
 				hits = append(hits, [2]int{i, end})
 			}
 			i = end - 1

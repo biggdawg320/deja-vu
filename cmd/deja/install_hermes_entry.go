@@ -271,6 +271,18 @@ func hermesMCPOffNote(p string) string {
 	return mcpOffNote("hermes", "`mcp_servers.deja.enabled: "+v+"`", p)
 }
 
+// hermesSameEntries is true when every copy has the same value under its key:
+// the lines below it, and anything written on the key line itself.
+func hermesSameEntries(lines []string, entries []hermesEntry) bool {
+	last := entries[len(entries)-1]
+	for _, e := range entries[:len(entries)-1] {
+		if e.inline != last.inline || !slices.Equal(lines[e.start+1:e.end], lines[last.start+1:last.end]) {
+			return false
+		}
+	}
+	return true
+}
+
 // hermesEditEntry points the deja entry the reader already has at this
 // binary, in place: `command` and `args` change when they say something
 // else, and every other key — timeout, env, tools, the reader's own switch —
@@ -299,6 +311,15 @@ func hermesEditEntry(lines []string, exe string) (out []string, note string, don
 				if entrie != keep[0] {
 					lines = append(lines[:entrie.start], lines[entrie.end:]...)
 				}
+			}
+			entries = hermesDejaEntries(lines)
+		} else if hermesSameEntries(lines, entries) {
+			// The same entry written twice, spelled `deja:` and `'deja':`
+			// or not: Hermes reads the last, so the earlier copies say
+			// nothing it does not (#5292).
+			lines = append([]string(nil), lines...)
+			for _, entrie := range slices.Backward(entries[:len(entries)-1]) {
+				lines = append(lines[:entrie.start], lines[entrie.end:]...)
 			}
 			entries = hermesDejaEntries(lines)
 		}

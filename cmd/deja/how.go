@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -383,7 +384,16 @@ func howScope(cwd, project string, allProjects bool) []string {
 	if cwd == "" {
 		return nil
 	}
-	return digest.ProjectNameCandidates(cwd)
+	names := digest.ProjectNameCandidates(cwd)
+	// The name the rows show goes first, for howScopeName. The candidates
+	// open with the Claude-encoded reading of the directory, which turns a
+	// hyphen into a slash: the footer said "in my/app only", a name no row
+	// shows and --project does not take (#5321). The order does not change
+	// what matches; every name is tried.
+	if label := digest.ProjectLabel(cwd); label != "" {
+		names = append([]string{label}, slices.DeleteFunc(names, func(name string) bool { return name == label })...)
+	}
+	return names
 }
 
 // howCwd is the directory the answer is about. A caller with none — a daemon, a

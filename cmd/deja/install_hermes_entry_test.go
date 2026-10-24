@@ -165,6 +165,7 @@ func TestInstallHermesRefusesAnEntryItCannotEditInPlace(t *testing.T) {
 		"flow args over lines": "mcp_servers:\n  deja:\n    command: /bin/deja\n    args: [\n      serve\n    ]\n",
 		"generated copy last":  "mcp_servers:\n  deja:\n    command: /old/deja\n    args: [mcp]\n    enabled: false\n  deja:\n    command: \"/bin/deja\"\n    args:\n      - mcp\n    enabled: true\n",
 		"twice":                "mcp_servers:\n  deja:\n    command: /bin/deja\n  \"deja\":\n    command: /bin/deja\n    enabled: false\n",
+		"twice, timeouts":      "mcp_servers:\n  deja:\n    command: /old/deja\n    args: [mcp]\n    timeout: 30\n  deja:\n    command: /old/deja\n    args: [mcp]\n    timeout: 60\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := hermesTestConfig(t, cfg)
@@ -305,6 +306,16 @@ func TestInstallHermesEntryShapesFromReview(t *testing.T) {
 			cfg:         "mcp_servers:\n  deja:\n    command: \"/bin/deja\"\n    args:\n      - mcp\n    enabled: true\n  deja:   # mine\n    command: /old/deja\n    args: [mcp]\n    timeout: 60\n",
 			want:        "mcp_servers:\n  deja:   # mine\n    command: \"/bin/deja\"\n    args: [mcp]\n    timeout: 60\n",
 			uninstalled: "mcp_servers:\n",
+		},
+		"two copies of deja's own entry": {
+			cfg:         "mcp_servers:\n  deja:\n    command: \"/usr/local/bin/deja\"\n    args:\n      - mcp\n    enabled: true\n  'deja':\n    command: \"/usr/local/bin/deja\"\n    args:\n      - mcp\n    enabled: true\n",
+			want:        "mcp_servers:\n  'deja':\n    command: \"/bin/deja\"\n    args:\n      - mcp\n    enabled: true\n",
+			uninstalled: "mcp_servers:\n",
+		},
+		"two identical copies of the reader's": {
+			cfg:         "mcp_servers:\n  other:\n    command: x\n  deja:\n    command: /old/deja\n    args: [mcp]\n    timeout: 30\n  deja:\n    command: /old/deja\n    args: [mcp]\n    timeout: 30\n",
+			want:        "mcp_servers:\n  other:\n    command: x\n  deja:\n    command: \"/bin/deja\"\n    args: [mcp]\n    timeout: 30\n",
+			uninstalled: "mcp_servers:\n  other:\n    command: x\n",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

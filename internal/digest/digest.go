@@ -550,6 +550,17 @@ func PrimaryProjectName(cwd string) string {
 	return sources.ClaudeProjectName(projectRoot(cwd))
 }
 
+// ProjectLabel is the name the rows give the project at cwd, and the one
+// --project takes: the alias, or the parent/base form of the directory. Not
+// PrimaryProjectName, which decodes the directory as a Claude project dir and
+// so reads `my-app` as `my/app` (#5321).
+func ProjectLabel(cwd string) string {
+	if name, ok := sources.ProjectAliasFor(cwd); ok {
+		return name
+	}
+	return sources.CWDProjectName(projectRoot(cwd))
+}
+
 // projectRoot is where the names are taken from: a WorkBuddy chat folder is
 // named for the workspace root it sits in, as the session recorded there is
 // (#4735).

@@ -422,6 +422,41 @@ func copilotPowerShellCommand(exe string, args ...string) string {
 	return strings.Join(append([]string{"& '" + strings.ReplaceAll(p, "'", "''") + "'"}, args...), " ")
 }
 
+// cutCopilotHookElements takes the elements of the list spanned by at that
+// keep does not hold out of text, matching each against what is kept by value.
+// ok is false when the text does not come out as keep, and the caller writes
+// the list again.
+func cutCopilotHookElements(text string, at [2]int, keep any) (string, bool) {
+	kept, isList := keep.([]any)
+	if !isList {
+		return "", false
+	}
+	left := slices.Clone(kept)
+	next, err := jsoncCutListElements(text, at, func(elem string) bool {
+		var v any
+		if json.Unmarshal([]byte(jsoncToJSON(elem)), &v) != nil {
+			return false
+		}
+		for i, k := range left {
+			if reflect.DeepEqual(v, k) {
+				left = slices.Delete(left, i, i+1)
+				return false
+			}
+		}
+		return true
+	})
+	if err != nil || len(left) > 0 {
+		return "", false
+	}
+	// The cut list must read as keep, or the old rewrite takes over.
+	end := at[1] - (len(text) - len(next))
+	var back any
+	if end <= at[0] || json.Unmarshal([]byte(jsoncToJSON(next[at[0]:end])), &back) != nil || !reflect.DeepEqual(back, keep) {
+		return "", false
+	}
+	return next, true
+}
+
 // dropCopilotHooksJSONC takes deja's entries out of a commented hooks block:
 // an event left with nothing goes, one that keeps the reader's entries has its
 // list written again, and the block goes when deja is what added it. was is the
@@ -449,6 +484,12 @@ func dropCopilotHooksJSONC(text string, was, root map[string]any) (string, error
 			at := jsoncListValue(text, block, event)
 			if at == nil {
 				return "", fmt.Errorf("hooks.%s is not a list deja can edit", event)
+			}
+			// Deja's elements come out as text, so the comments the reader
+			// wrote in the list stay with their entries (#5312).
+			if cut, ok := cutCopilotHookElements(text, *at, now); ok {
+				text = cut
+				continue
 			}
 			// The reader's entries are written again, unescaped: a
 			// `&&` in their command stays readable.

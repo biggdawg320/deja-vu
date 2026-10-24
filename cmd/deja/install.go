@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/vshulcz/deja-vu/internal/digest"
 	"github.com/vshulcz/deja-vu/internal/index"
@@ -1131,12 +1132,22 @@ func snapshotHoldsDejaWiring(b []byte) bool {
 	return mentionsDeja(out)
 }
 
-// withoutDejaListNames is v without the list items that are the bare name.
+// dejaEntryKeys are the keys deja puts its own name under to identify an entry.
+var dejaEntryKeys = map[string]bool{"name": true, "id": true, "label": true}
+
+// withoutDejaListNames is v without the list items and map values that are the
+// bare name. A key named deja stays: that is deja's entry. So does a value under
+// the keys deja names its own entries by (`"name": "deja"` in its plugin package,
+// `"id"` and `"label"` in grok's server list). Any other value is the reader's own
+// choice, as in OpenClaw's `plugins.slots.memory` (#5308).
 func withoutDejaListNames(v any) any {
 	switch t := v.(type) {
 	case map[string]any:
 		m := make(map[string]any, len(t))
 		for k, c := range t {
+			if s, ok := c.(string); ok && !dejaEntryKeys[k] && strings.TrimSpace(s) == "deja" {
+				continue
+			}
 			m[k] = withoutDejaListNames(c)
 		}
 		return m
@@ -1463,6 +1474,10 @@ func (e readOnlyConfigError) Is(target error) bool { return target == fs.ErrPerm
 // Asked by opening the file for writing, without truncating it, so whatever
 // the platform enforces — a mode, an ACL, Windows' read-only attribute — is
 // what decides.
+//
+// A config that is not there yet is writable only if the writer can make it:
+// the pre-flight used to pass it unasked, so a target whose directory could
+// not be created was refused after its other files were already wired (#5291).
 func configWritable(path string) error {
 	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err == nil {
@@ -1471,7 +1486,53 @@ func configWritable(path string) error {
 	if errors.Is(err, fs.ErrPermission) {
 		return readOnlyConfigError{path}
 	}
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+		return configCreatable(path)
+	}
 	return nil
+}
+
+// configCreatable asks the nearest directory that exists above a missing
+// config whether a file can be created in it, the way writeIfChanged would:
+// by creating its scratch file there and removing it again. A mode bit is not
+// the answer — it denies nothing on Windows or to root — and neither is
+// creating the missing directories, which would leave them behind for a
+// target that is then refused. The error names what the writer would have
+// failed on, so errors.Is still sees a permission denial underneath.
+func configCreatable(path string) error {
+	missing := ""
+	dir := filepath.Dir(path)
+	for {
+		info, err := os.Stat(dir)
+		if err == nil {
+			if !info.IsDir() {
+				return &fs.PathError{Op: "mkdir", Path: dir, Err: syscall.ENOTDIR}
+			}
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil
+		}
+		missing, dir = dir, parent
+	}
+	tmp, err := os.CreateTemp(dir, ".deja-tmp-")
+	if err != nil {
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			if missing != "" {
+				return &fs.PathError{Op: "mkdir", Path: missing, Err: pe.Err}
+			}
+			return &fs.PathError{Op: "open", Path: path, Err: pe.Err}
+		}
+		return err
+	}
+	name := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	return os.Remove(name)
 }
 
 func writeIfChanged(path string, old, next []byte) (string, error) {
@@ -5065,6 +5126,9 @@ func installTargetNames() []string {
 		"trae", "trae-auto",
 		"trae-ide", "trae-ide-auto",
 		"muse", "muse-auto",
+		// MiniMax Code: the MCP entry alone, and the package that adds the
+		// hooks beside it.
+		"mcode", "mcode-auto",
 		"kimi", "kimi-auto",
 		"hermes", "hermes-auto",
 		"pi", "pi-auto",
@@ -5244,6 +5308,10 @@ func existingTargetChecks() map[string]string {
 		"workbuddy":    filepath.Join(sources.WorkBuddyConfigDir(), "projects"),
 		"trae":         filepath.Join(sources.TraeRoot(), "sessions"), // the same: deja creates traecli.toml
 		"muse":         sources.MuseRoot(),                            // the same: deja creates ~/.config/muse
+		// The session store, not the config: deja creates mcp.json and the
+		// plugin package itself, so keying on the config would make every
+		// machine a MiniMax Code machine after one install.
+		"mcode": sources.McodeRoot(),
 		// The IDE's own globalStorage, not User/: deja writes User/mcp.json.
 		"trae-ide": filepath.Join(traeIDEUserDir(), "globalStorage"),
 		// Reasonix's own config.toml, which it writes on first run. deja
